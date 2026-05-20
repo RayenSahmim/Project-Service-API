@@ -100,6 +100,27 @@ curl -X POST http://localhost:8080/graphql \
   -d '{"query":"query { products { id name price stock } }"}'
 ```
 
+### Swagger UI (API Documentation)
+Both REST services expose a Swagger UI. You can access them directly in your browser:
+- **Catalog Service:** [http://localhost:8080/catalog/api-docs](http://localhost:8080/catalog/api-docs) (or directly via `http://localhost:3001/api-docs`)
+- **Order Service:** [http://localhost:8080/order/api-docs](http://localhost:8080/order/api-docs) (or directly via `http://localhost:3002/api-docs`)
+
+---
+
+## Running Tests
+
+The project includes an end-to-end (E2E) test suite using Jest to verify the full microservices flow. 
+
+1. Ensure the platform is running (see Quick start).
+2. Install the test dependencies in the project root:
+   ```bash
+   npm install
+   ```
+3. Run the E2E test suite:
+   ```bash
+   npm test
+   ```
+
 ---
 
 ## Why REST, gRPC, Kafka, and GraphQL each play a different role
