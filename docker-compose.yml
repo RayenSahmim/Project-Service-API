@@ -1,0 +1,120 @@
+services:
+  zookeeper:
+    image: confluentinc/cp-zookeeper:7.4.0
+    environment:
+      ZOOKEEPER_CLIENT_PORT: 2181
+      ZOOKEEPER_TICK_TIME: 2000
+    ports:
+      - "2181:2181"
+
+  kafka:
+    image: confluentinc/cp-kafka:7.4.0
+    depends_on:
+      - zookeeper
+    ports:
+      - "9092:9092"
+      - "29092:29092"
+    environment:
+      KAFKA_BROKER_ID: 1
+      KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,PLAINTEXT_INTERNAL:PLAINTEXT
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://localhost:9092,PLAINTEXT_INTERNAL://kafka:29092
+      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT_INTERNAL
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "true"
+
+  postgres:
+    image: postgres:15
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: postgres
+    ports:
+      - "5433:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./postgres-init:/docker-entrypoint-initdb.d
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  # --- Microservices ---
+
+  catalog-service:
+    build: ./catalog-service
+    ports:
+      - "3001:3001"
+    environment:
+      PORT: 3001
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_NAME: catalog_db
+      DB_USER: postgres
+      DB_PASSWORD: postgres
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  stock-service:
+    build: ./stock-service
+    ports:
+      - "50051:50051"
+    environment:
+      GRPC_HOST: 0.0.0.0
+      GRPC_PORT: 50051
+
+  order-service:
+    build: ./order-service
+    ports:
+      - "3002:3002"
+    environment:
+      PORT: 3002
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_NAME: order_db
+      DB_USER: postgres
+      DB_PASSWORD: postgres
+      STOCK_SERVICE_GRPC: stock-service:50051
+      KAFKA_BROKER: kafka:29092
+    depends_on:
+      postgres:
+        condition: service_healthy
+      stock-service:
+        condition: service_started
+      kafka:
+        condition: service_started
+
+  notification-service:
+    build: ./notification-service
+    environment:
+      KAFKA_BROKER: kafka:29092
+    depends_on:
+      - kafka
+
+  query-service:
+    build: ./query-service
+    ports:
+      - "3004:3004"
+    environment:
+      PORT: 3004
+      CATALOG_SERVICE_URL: http://catalog-service:3001
+      ORDER_SERVICE_URL: http://order-service:3002
+    depends_on:
+      - catalog-service
+      - order-service
+
+  api-gateway:
+    image: nginx:latest
+    ports:
+      - "8080:80"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+    depends_on:
+      - catalog-service
+      - order-service
+      - query-service
+
+volumes:
+  pgdata:
