@@ -100,6 +100,59 @@ curl -X POST http://localhost:8080/graphql \
   -d '{"query":"query { products { id name price stock } }"}'
 ```
 
+---
+
+## E2E Testing
+
+To run the End-to-End tests against the live services, install the npm test dependencies and run `npm run test`:
+
+```bash
+npm install
+npm run test
+```
+
+### Result Analysis
+
+When running the tests on a fresh environment (e.g., after running `docker compose down -v && docker compose up --build -d`), the test suite will successfully execute the full Happy Path, returning the following output:
+
+```bash
+> project-service-api-e2e@1.0.0 test
+> jest --detectOpenHandles --verbose
+
+  console.log
+    ✅ [Catalog] Fetched initial products reliably.
+  console.log
+    ✅ [Order] Successfully generated Order #1. gRPC stock reservation passed.
+  console.log
+    ✅ [Stock] Correctly rejected the order due to insufficient stock over gRPC.
+  console.log
+    ✅ [Stock] Cleanly rejected the order because stock-service does not have this new product.
+  console.log
+    ✅ [Query/GraphQL] Successfully fetched the order by ID through GraphQL.
+  console.log
+    ✅ [Happy Path] Complete journey (Query -> Create -> Fetch) via GraphQL succeeded.
+
+ PASS  tests/e2e.test.js
+  Microservices End-to-End Tests
+    ✓ 1. Catalog Service - Should fetch the seeded products (90 ms)
+    ✓ 2. Order Service - Should successfully create an order and call Stock via gRPC (113 ms)
+    ✓ 3. Stock Service (via Order) - Should reject order if stock is insufficient (80 ms)
+    ✓ 4. Stock Service (via Order) - Should reject order if product does not exist in store (54 ms)
+    ✓ 5. Query Service (GraphQL) - Should combine data across services using GraphQL (48 ms)
+    ✓ 6. Full Happy Path (GraphQL) - Should query products, create an order, and fetch it (108 ms)
+
+Test Suites: 1 passed, 1 total
+Tests:       6 passed, 6 total
+```
+
+**Explanation of the Results:**
+- **Tests 1 & 2:** Successfully test standard REST interactions and fundamental inter-service communication (gRPC between `order-service` and `stock-service`).
+- **Tests 3 & 4:** Verify that the `stock-service` acts as a solid line of defense, preventing orders of items with insufficient stock or items that don't exist.
+- **Test 5:** Proves the GraphQL `query-service` accurately queries and resolves data persisted by the other microservices.
+- **Test 6 (Happy Path):** Simulates a full, realistic user journey connecting multiple services through the single GraphQL endpoint: querying available products, firing a mutation to generate an order (which is checked natively against the external Stock gRPC service), and subsequently confirming the order state using an immediate fetch query. 
+
+*(Note: Running the tests multiple times consecutively without resetting the Docker containers will cause the tests to deplete the stock. The Stock Service will then continuously throw a `409 Conflict` until the environment is brought back up fresh!)*
+
 ### Swagger UI (API Documentation)
 Both REST services expose a Swagger UI. You can access them directly in your browser:
 - **Catalog Service:** [http://localhost:8080/catalog/api-docs](http://localhost:8080/catalog/api-docs) (or directly via `http://localhost:3001/api-docs`)

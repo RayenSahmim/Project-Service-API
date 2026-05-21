@@ -114,4 +114,67 @@ describe('Microservices End-to-End Tests', () => {
     
     console.log('✅ [Query/GraphQL] Successfully fetched the order by ID through GraphQL.');
   });
+
+  test('6. Full Happy Path (GraphQL) - Should query products, create an order, and fetch it', async () => {
+    // Step 1: Fetch products
+    const productsQuery = {
+      query: `
+        query {
+          products {
+            id
+            name
+            price
+            stock
+          }
+        }
+      `
+    };
+    const productsResponse = await axiosInstance.post(QUERY_URL, productsQuery);
+    expect(productsResponse.status).toBe(200);
+    expect(productsResponse.data.data.products.length).toBeGreaterThan(0);
+    const firstProduct = productsResponse.data.data.products.find(p => p.id === "1"); // Assuming Laptop is 1
+    
+    // Step 2: Create Order via GraphQL Mutation
+    const createOrderMutation = {
+      query: `
+        mutation {
+          createOrder(productId: "${firstProduct.id}", quantity: 1, customerEmail: "happy.path@test.com") {
+            id
+            status
+            customerEmail
+          }
+        }
+      `
+    };
+    const orderResponse = await axiosInstance.post(QUERY_URL, createOrderMutation);
+    expect(orderResponse.status).toBe(200);
+    expect(orderResponse.data.errors).toBeUndefined();
+    
+    const newOrder = orderResponse.data.data.createOrder;
+    expect(newOrder.id).toBeDefined();
+    expect(newOrder.status).toBe('confirmed');
+    expect(newOrder.customerEmail).toBe("happy.path@test.com");
+
+    const happyPathOrderId = newOrder.id;
+
+    // Step 3: Fetch the newly created order
+    const fetchOrderQuery = {
+      query: `
+        query {
+          orderById(id: "${happyPathOrderId}") {
+            id
+            status
+            quantity
+          }
+        }
+      `
+    };
+    
+    const fetchOrderResponse = await axiosInstance.post(QUERY_URL, fetchOrderQuery);
+    expect(fetchOrderResponse.status).toBe(200);
+    expect(fetchOrderResponse.data.data.orderById.id).toBe(happyPathOrderId);
+    expect(fetchOrderResponse.data.data.orderById.quantity).toBe(1);
+
+    console.log('✅ [Happy Path] Complete journey (Query -> Create -> Fetch) via GraphQL succeeded.');
+  });
 });
